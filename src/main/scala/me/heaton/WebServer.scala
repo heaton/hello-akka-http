@@ -14,28 +14,28 @@ import scala.concurrent.Future
 import scala.io.StdIn
 
 object WebServer {
-//  def main(args: Array[String]) {
-//
-//    implicit val system = ActorSystem("my-system")
-//    implicit val materializer = ActorMaterializer()
-//    // needed for the future flatMap/onComplete in the end
-//    implicit val executionContext = system.dispatcher
-//
-//    val route =
-//      path("hello") {
-//        get {
-//          complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h1>Say hello to akka-http</h1>"))
-//        }
-//      }
-//
-//    val bindingFuture = Http().bindAndHandle(route, "localhost", 8080)
-//
-//    println(s"Server online at http://localhost:8080/\nPress RETURN to stop...")
-//    StdIn.readLine() // let it run until user presses return
-//    bindingFuture
-//      .flatMap(_.unbind()) // trigger unbinding from the port
-//      .onComplete(_ => system.terminate()) // and shutdown when done
-//  }
+  //  def main(args: Array[String]) {
+  //
+  //    implicit val system = ActorSystem("my-system")
+  //    implicit val materializer = ActorMaterializer()
+  //    // needed for the future flatMap/onComplete in the end
+  //    implicit val executionContext = system.dispatcher
+  //
+  //    val route =
+  //      path("hello") {
+  //        get {
+  //          complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h1>Say hello to akka-http</h1>"))
+  //        }
+  //      }
+  //
+  //    val bindingFuture = Http().bindAndHandle(route, "localhost", 8080)
+  //
+  //    println(s"Server online at http://localhost:8080/\nPress RETURN to stop...")
+  //    StdIn.readLine() // let it run until user presses return
+  //    bindingFuture
+  //      .flatMap(_.unbind()) // trigger unbinding from the port
+  //      .onComplete(_ => system.terminate()) // and shutdown when done
+  //  }
 
   // needed to run the route
   implicit val system = ActorSystem()
@@ -50,6 +50,7 @@ object WebServer {
     require(!name.isEmpty, "name can not be empty")
     require(id > 0, "id has to be an positive integer")
   }
+
   final case class Order(items: List[Item])
 
   // formats for unmarshalling and marshalling
@@ -60,40 +61,43 @@ object WebServer {
   def fetchItem(itemId: Long): Future[Option[Item]] = Future {
     orders.find(o => o.id == itemId)
   }
+
   def saveOrder(order: Order): Future[Done] = {
     orders = order match {
       case Order(items) => items ::: orders
-      case _            => orders
+      case _ => orders
     }
-    Future { Done }
+    Future {
+      Done
+    }
   }
 
-  def main(args: Array[String]) {
+  val routes: Route =
+    get {
+      pathPrefix("item" / LongNumber) { id =>
+        // there might be no item for a given id
+        val maybeItem: Future[Option[Item]] = fetchItem(id)
 
-    val route: Route =
-      get {
-        pathPrefix("item" / LongNumber) { id =>
-          // there might be no item for a given id
-          val maybeItem: Future[Option[Item]] = fetchItem(id)
-
-          onSuccess(maybeItem) {
-            case Some(item) => complete(item)
-            case None       => complete(StatusCodes.NotFound)
-          }
+        onSuccess(maybeItem) {
+          case Some(item) => complete(item)
+          case None => complete(StatusCodes.NotFound)
         }
-      } ~
-        post {
-          path("create-order") {
-            entity(as[Order]) { order =>
-              val saved: Future[Done] = saveOrder(order)
-              onComplete(saved) { done =>
-                complete("order created")
-              }
+      }
+    } ~
+      post {
+        path("create-order") {
+          entity(as[Order]) { order =>
+            val saved: Future[Done] = saveOrder(order)
+            onComplete(saved) { done =>
+              complete("order created")
             }
           }
         }
+      }
 
-    val bindingFuture = Http().bindAndHandle(route, "localhost", 8080)
+  def main(args: Array[String]) {
+
+    val bindingFuture = Http().bindAndHandle(routes, "localhost", 8080)
     println(s"Server online at http://localhost:8080/\nPress RETURN to stop...")
     StdIn.readLine() // let it run until user presses return
     bindingFuture
