@@ -1,5 +1,6 @@
 package me.heaton
 
+import akka.http.scaladsl.model.headers._
 import akka.http.scaladsl.model.{HttpEntity, MediaTypes, StatusCodes}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
@@ -18,6 +19,8 @@ class WebServerSpec extends WordSpec with Matchers with ScalatestRouteTest {
       }
     }
 
+    lazy val oauth2Token = OAuth2BearerToken("Heaton")
+
     "create an order for POST of /create-order" in {
       Post("/create-order", withJsonBody(
         """
@@ -27,7 +30,7 @@ class WebServerSpec extends WordSpec with Matchers with ScalatestRouteTest {
           |  ]
           |}
           |""".stripMargin)
-      ) ~> routes ~> check {
+      ) ~> addCredentials(oauth2Token) ~> routes ~> check {
         status shouldBe StatusCodes.OK
         responseAs[String] shouldEqual "order created"
       }
@@ -42,7 +45,7 @@ class WebServerSpec extends WordSpec with Matchers with ScalatestRouteTest {
           |  ]
           |}
           |""".stripMargin)
-      ) ~> Route.seal(routes) ~> check {
+      ) ~> addCredentials(oauth2Token) ~> Route.seal(routes) ~> check {
         status shouldBe StatusCodes.BadRequest
         responseAs[String] contains "name can not be empty"
       }
@@ -57,9 +60,25 @@ class WebServerSpec extends WordSpec with Matchers with ScalatestRouteTest {
           |  ]
           |}
           |""".stripMargin)
-      ) ~> Route.seal(routes) ~> check {
+      ) ~> addCredentials(oauth2Token) ~> Route.seal(routes) ~> check {
         status shouldBe StatusCodes.BadRequest
-        responseAs[String] contains "id has to be an positive integer"
+        responseAs[String] should include ("id has to be an positive integer")
+      }
+    }
+
+    "return 401 unauthenicated when no auth2 token provided on POST of /create-order" in {
+      Post("/create-order", withJsonBody("{}")) ~> Route.seal(routes) ~> check {
+        status shouldBe StatusCodes.Unauthorized
+        responseAs[String] should include ("The resource requires authentication")
+        header[`WWW-Authenticate`].get.challenges.head === HttpChallenge("Bearer", Some("Hello akka"), Map("charset" → "UTF-8"))
+      }
+    }
+
+    "return 401 unauthenicated when wrong auth2 token provided on POST of /create-order" in {
+      Post("/create-order", withJsonBody("{}")) ~> addCredentials(OAuth2BearerToken("Something else")) ~> Route.seal(routes) ~> check {
+        status shouldBe StatusCodes.Unauthorized
+        responseAs[String] should include ("The supplied authentication is invalid")
+        header[`WWW-Authenticate`].get.challenges.head === HttpChallenge("Bearer", Some("Hello akka"), Map("charset" → "UTF-8"))
       }
     }
   }

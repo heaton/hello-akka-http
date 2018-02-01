@@ -7,6 +7,7 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
+import akka.http.scaladsl.server.directives.Credentials
 import akka.stream.ActorMaterializer
 import spray.json.DefaultJsonProtocol._
 
@@ -72,6 +73,12 @@ object WebServer {
     }
   }
 
+  def oauth2Athenicator(credentials: Credentials): Option[String] =
+    credentials match {
+      case p@Credentials.Provided(token) if p.verify("Heaton") => Some(token)
+      case _ => None
+    }
+
   val routes: Route =
     get {
       pathPrefix("item" / LongNumber) { id =>
@@ -84,8 +91,9 @@ object WebServer {
         }
       }
     } ~
-      post {
-        path("create-order") {
+    post {
+      path("create-order") {
+        authenticateOAuth2("hello akka", oauth2Athenicator) { _ =>
           entity(as[Order]) { order =>
             val saved: Future[Done] = saveOrder(order)
             onComplete(saved) { done =>
@@ -94,6 +102,7 @@ object WebServer {
           }
         }
       }
+    }
 
   def main(args: Array[String]) {
 
